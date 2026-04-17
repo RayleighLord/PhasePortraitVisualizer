@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Planar Phase Portrait Explorer</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="panel control-panel">
+        <div class="panel-heading">
+          <p class="eyebrow">Planar System Explorer</p>
+          <h1>
+            Phase portraits for systems of the form
+            <span id="hero-equation" class="title-equation system-title-equation"></span>
+          </h1>
+          <p class="panel-copy">
+            Enter a planar system and click the plot to trace an orbit.
+          </p>
+        </div>
+
+        <section class="card">
+          <div class="section-header">
+            <h2>System</h2>
+          </div>
+          <div class="equation-grid">
+            <label class="field equation-field">
+              <div class="equation-input-row">
+                <span
+                  id="x-equation-prefix"
+                  class="equation-prefix equation-prefix-math"
+                  aria-hidden="true"
+                ></span>
+                <textarea
+                  id="x-equation-input"
+                  class="equation-input"
+                  rows="2"
+                  spellcheck="false"
+                  aria-label="x prime equation"
+                ></textarea>
+              </div>
+            </label>
+            <label class="field equation-field">
+              <div class="equation-input-row">
+                <span
+                  id="y-equation-prefix"
+                  class="equation-prefix equation-prefix-math"
+                  aria-hidden="true"
+                ></span>
+                <textarea
+                  id="y-equation-input"
+                  class="equation-input"
+                  rows="2"
+                  spellcheck="false"
+                  aria-label="y prime equation"
+                ></textarea>
+              </div>
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="section-header">
+            <h2>Examples</h2>
+          </div>
+          <label class="field">
+            <select id="example-select" class="example-select" aria-label="Example library"></select>
+          </label>
+        </section>
+
+        <form id="bounds-form" class="card" novalidate>
+          <div class="section-header">
+            <h2>Visible window</h2>
+            <button id="apply-bounds-button" class="secondary-button" type="submit">
+              Update view
+            </button>
+          </div>
+
+          <div class="bounds-grid">
+            <label class="field">
+              <span class="field-label">x min</span>
+              <input id="x-min-input" name="xMin" type="number" step="any" />
+            </label>
+            <label class="field">
+              <span class="field-label">x max</span>
+              <input id="x-max-input" name="xMax" type="number" step="any" />
+            </label>
+            <label class="field">
+              <span class="field-label">y min</span>
+              <input id="y-min-input" name="yMin" type="number" step="any" />
+            </label>
+            <label class="field">
+              <span class="field-label">y max</span>
+              <input id="y-max-input" name="yMax" type="number" step="any" />
+            </label>
+          </div>
+        </form>
+
+        <section class="card">
+          <div class="button-row">
+            <button id="reset-button" class="primary-button" type="button">Reset example</button>
+            <button id="clear-curves-button" class="ghost-button" type="button">
+              Clear curves
+            </button>
+            <button id="seed-ring-button" class="secondary-button" type="button">
+              Random seeds
+            </button>
+          </div>
+        </section>
+
+        <section class="card">
+          <label class="toggle-row" for="trajectory-animation-toggle">
+            <span>
+              <span class="toggle-title">Animate flow</span>
+              <span class="toggle-copy">Show moving flow along all visible trajectories.</span>
+            </span>
+            <input
+              id="trajectory-animation-toggle"
+              class="toggle-input"
+              type="checkbox"
+            />
+            <span class="toggle-pill" aria-hidden="true"></span>
+          </label>
+        </section>
+
+        <section class="card status-card">
+          <div class="status-row">
+            <span class="status-label">Equation status</span>
+            <span id="equation-status" class="status-chip"></span>
+          </div>
+          <div class="analysis-stack">
+            <div class="analysis-block">
+              <span class="status-label">Selected equilibrium</span>
+              <select id="equilibrium-select" class="example-select" aria-label="Selected equilibrium"></select>
+            </div>
+            <div class="analysis-block">
+              <span class="status-label">Jacobian</span>
+              <div id="jacobian-display" class="analysis-value is-math"></div>
+            </div>
+            <div class="analysis-block analysis-block-wide analysis-block-emphasis">
+              <span class="status-label">Eigenvalues</span>
+              <div id="eigenvalue-display" class="analysis-value is-math"></div>
+            </div>
+            <div class="analysis-block analysis-block-wide analysis-block-classification">
+              <span class="status-label">Classification</span>
+              <div id="classification-display" class="analysis-value"></div>
+            </div>
+            <div class="analysis-block analysis-block-wide">
+              <span class="status-label">Equilibria found</span>
+              <div id="all-equilibria-display" class="equilibrium-summary-list"></div>
+            </div>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Trajectories shown</span>
+            <span id="curve-count" class="status-value"></span>
+          </div>
+          <ul id="notice-list" class="notice-list"></ul>
+        </section>
+      </aside>
+
+      <main class="panel plot-panel">
+        <div class="plot-header">
+          <p class="eyebrow">Phase portrait</p>
+          <p class="plot-help">
+            Color shows speed, arrows show direction, and clicking seeds one orbit.
+          </p>
+        </div>
+        <div class="plot-stage">
+          <div class="plot-equation-banner">
+            <div id="plot-system-preview" class="plot-ode-preview" aria-live="polite"></div>
+          </div>
+          <svg
+            id="portrait-plot"
+            viewBox="0 0 960 640"
+            role="img"
+            aria-label="Interactive phase portrait and trajectories"
+          ></svg>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

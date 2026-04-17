@@ -1,0 +1,747 @@
+:root {
+  color-scheme: light;
+  --page-background: #eef4fb;
+  --page-ink: #17304a;
+  --muted-ink: #60758c;
+  --panel-surface: rgba(255, 252, 247, 0.8);
+  --panel-surface-strong: rgba(255, 250, 244, 0.96);
+  --panel-border: rgba(52, 94, 139, 0.11);
+  --plot-surface: #fffdfa;
+  --frame-stroke: rgba(38, 77, 117, 0.18);
+  --grid-stroke: rgba(85, 125, 167, 0.13);
+  --axis-stroke: rgba(30, 57, 83, 0.42);
+  --axis-label: rgba(37, 67, 96, 0.78);
+  --axis-title: #17304a;
+  --shadow-soft: 0 22px 45px rgba(66, 88, 118, 0.12);
+  --font-sans: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", "Consolas", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow: auto;
+  font-family: var(--font-sans);
+  color: var(--page-ink);
+  background:
+    radial-gradient(circle at top left, rgba(127, 184, 255, 0.26), transparent 26%),
+    radial-gradient(circle at 85% 16%, rgba(255, 205, 150, 0.24), transparent 22%),
+    radial-gradient(circle at 50% 100%, rgba(179, 214, 255, 0.22), transparent 46%),
+    linear-gradient(180deg, #f7fbff 0%, #eef5fc 46%, #edf2f8 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(180deg, rgba(73, 114, 155, 0.03), rgba(73, 114, 155, 0) 88%),
+    linear-gradient(rgba(73, 114, 155, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(73, 114, 155, 0.035) 1px, transparent 1px);
+  background-size: auto, 44px 44px, 44px 44px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+}
+
+.app-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(334px, 394px) minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  align-content: stretch;
+  gap: 0.72rem;
+  width: min(1500px, calc(100vw - 0.7rem));
+  margin: 0 auto;
+  padding-block: clamp(0.08rem, 0.45vh, 0.32rem);
+  min-height: 100vh;
+}
+
+.panel {
+  background:
+    linear-gradient(180deg, rgba(255, 252, 247, 0.95), rgba(250, 252, 255, 0.92));
+  border: 1px solid var(--panel-border);
+  border-radius: 28px;
+  box-shadow: var(--shadow-soft);
+}
+
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  padding: 0.5rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.plot-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0.56rem;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panel-heading {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.panel-heading h1,
+.section-header h2 {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.panel-heading h1 {
+  font-size: clamp(1.04rem, 1.18vw, 1.4rem);
+  line-height: 1.03;
+}
+
+.section-header h2 {
+  font-size: 1rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.16rem;
+  color: #377fbe;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.title-equation {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.18rem;
+  color: #246a9a;
+}
+
+.system-title-equation {
+  display: block;
+  margin-top: 0.08rem;
+  margin-left: 0;
+}
+
+.system-title-equation .katex-display {
+  margin: 0.08rem 0 0;
+}
+
+.system-title-equation .katex {
+  font-size: 0.78em;
+}
+
+.panel-copy,
+.plot-help,
+.field-help {
+  margin: 0;
+  color: var(--muted-ink);
+  line-height: 1.28;
+}
+
+.panel-copy,
+.field-help,
+.plot-help {
+  font-size: 0.73rem;
+}
+
+.card {
+  display: grid;
+  gap: 0.32rem;
+  padding: 0.42rem 0.48rem;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(249, 251, 255, 0.72));
+  border: 1px solid rgba(52, 94, 139, 0.08);
+}
+
+.section-header,
+.plot-header,
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field-label,
+.status-label {
+  font-size: 0.74rem;
+  color: var(--muted-ink);
+}
+
+.equation-grid {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.equation-input-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.38rem;
+}
+
+.equation-prefix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.6rem;
+  border-radius: 14px;
+  padding: 0.5rem 0.62rem;
+  background: rgba(58, 111, 184, 0.08);
+  color: #2f6f9e;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.equation-prefix-math .katex {
+  font-size: 1em;
+}
+
+.example-select {
+  width: 100%;
+  border: 1px solid rgba(89, 132, 178, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--page-ink);
+  padding: 0.48rem 0.62rem;
+  font: inherit;
+}
+
+.example-select:focus {
+  outline: none;
+  border-color: rgba(56, 128, 197, 0.52);
+  box-shadow: 0 0 0 4px rgba(104, 164, 226, 0.16);
+}
+
+.equation-input,
+input[type="number"] {
+  width: 100%;
+  border: 1px solid rgba(89, 132, 178, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--page-ink);
+  padding: 0.48rem 0.62rem;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.equation-input {
+  resize: vertical;
+  min-height: 2.72rem;
+  font-family: var(--font-mono);
+  line-height: 1.35;
+}
+
+.equation-input:focus,
+input[type="number"]:focus {
+  outline: none;
+  border-color: rgba(56, 128, 197, 0.52);
+  box-shadow: 0 0 0 4px rgba(104, 164, 226, 0.16);
+}
+
+.bounds-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.34rem;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.28rem;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.46rem 0.62rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+.primary-button {
+  color: white;
+  background: linear-gradient(135deg, #3a8ed7, #2b5fbb);
+  box-shadow: 0 14px 28px rgba(53, 109, 177, 0.22);
+}
+
+.secondary-button,
+.ghost-button {
+  color: var(--page-ink);
+  background: rgba(65, 122, 184, 0.08);
+}
+
+.status-card {
+  gap: 0.22rem;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.status-chip.is-valid {
+  background: rgba(74, 162, 220, 0.12);
+  color: #2e78ad;
+}
+
+.status-chip.is-invalid {
+  background: rgba(217, 106, 72, 0.12);
+  color: #b95734;
+}
+
+.status-value {
+  text-align: right;
+  max-width: 60%;
+  color: var(--page-ink);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.analysis-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.28rem 0.4rem;
+}
+
+.analysis-block {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.analysis-block-wide {
+  grid-column: 1 / -1;
+}
+
+.analysis-block-classification .analysis-value {
+  font-size: 1.22rem;
+  line-height: 1.12;
+  font-weight: 700;
+  color: #1f4d78;
+}
+
+.equilibrium-summary-list {
+  display: grid;
+  gap: 0.18rem;
+  font-size: 0.77rem;
+  line-height: 1.18;
+  color: var(--page-ink);
+}
+
+.equilibrium-summary-item {
+  padding: 0.24rem 0.34rem;
+  border-radius: 12px;
+  background: rgba(58, 111, 184, 0.06);
+}
+
+.analysis-value {
+  min-height: 1rem;
+  color: var(--page-ink);
+  font-weight: 600;
+  line-height: 1.18;
+  font-size: 0.8rem;
+}
+
+.analysis-value.is-math {
+  font-weight: 500;
+  color: #214b70;
+  overflow-x: auto;
+}
+
+.analysis-value .katex {
+  font-size: 1em;
+}
+
+.analysis-block-emphasis .analysis-value .katex {
+  font-size: 1.1em;
+}
+
+.notice-list {
+  display: grid;
+  gap: 0.42rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notice-list.is-empty {
+  display: none;
+}
+
+.notice-item {
+  padding: 0.38rem 0.5rem;
+  border-radius: 14px;
+  font-size: 0.72rem;
+  line-height: 1.18;
+}
+
+.tone-info {
+  background: rgba(74, 162, 220, 0.1);
+  color: #2f6f9e;
+}
+
+.tone-warning {
+  background: rgba(237, 169, 110, 0.18);
+  color: #9a5a2b;
+}
+
+.tone-error {
+  background: rgba(220, 107, 90, 0.13);
+  color: #a94d3d;
+}
+
+.plot-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 0.12rem 0.34rem;
+}
+
+.plot-stage {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  isolation: isolate;
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--plot-surface);
+  border: 1px solid rgba(52, 94, 139, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+#portrait-plot {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.plot-equation-banner {
+  position: absolute;
+  top: 0.7rem;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.plot-ode-preview {
+  min-width: 238px;
+  padding: 0.68rem 1.12rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(52, 94, 139, 0.09);
+  box-shadow: 0 14px 34px rgba(88, 106, 129, 0.12);
+  color: #214b70;
+  text-align: center;
+}
+
+.plot-ode-preview .katex-display {
+  margin: 0;
+}
+
+.plot-ode-preview .katex {
+  font-size: 1.4rem;
+}
+
+.plot-ode-preview.is-invalid {
+  color: #a94d3d;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.trajectory-flow-segment {
+  pointer-events: none;
+  animation-name: trajectory-flow-shift;
+  animation-delay: var(--trajectory-flow-delay);
+  animation-duration: var(--trajectory-flow-duration);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  stroke-dashoffset: var(--trajectory-flow-start);
+}
+
+@keyframes trajectory-flow-shift {
+  from {
+    stroke-dashoffset: var(--trajectory-flow-start);
+  }
+
+  to {
+    stroke-dashoffset: var(--trajectory-flow-end);
+  }
+}
+
+.plot-annotation-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.plot-latex-label {
+  position: absolute;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--axis-label);
+  font-size: 1.3rem;
+  line-height: 1;
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.plot-latex-label .katex {
+  font-size: 1em;
+}
+
+.plot-latex-label.tick-label {
+  min-width: 78px;
+}
+
+.plot-latex-label.tick-label.is-y {
+  justify-content: flex-end;
+  min-width: 68px;
+  transform: translate(-100%, -50%);
+}
+
+.plot-latex-label.axis-label {
+  color: var(--axis-title);
+  font-size: 1.58rem;
+}
+
+.plot-latex-label.axis-label.vertical {
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+
+.toggle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  cursor: pointer;
+}
+
+.toggle-title {
+  display: block;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.toggle-copy {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--muted-ink);
+  font-size: 0.78rem;
+  line-height: 1.15;
+}
+
+.toggle-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-pill {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(107, 143, 180, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(60, 102, 145, 0.1);
+  transition: background 180ms ease;
+}
+
+.toggle-pill::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 6px rgba(56, 83, 113, 0.2);
+  transition: transform 180ms ease;
+}
+
+.toggle-input:checked + .toggle-pill {
+  background: linear-gradient(135deg, rgba(62, 154, 227, 0.86), rgba(58, 111, 205, 0.86));
+}
+
+.toggle-input:checked + .toggle-pill::after {
+  transform: translateX(20px);
+}
+
+@media (min-width: 981px) {
+  .app-shell {
+    height: 100vh;
+  }
+
+  .control-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .plot-panel {
+    min-height: 0;
+  }
+
+  .plot-stage {
+    min-height: 0;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 981px) {
+  .app-shell {
+    grid-template-columns: minmax(324px, 372px) minmax(0, 1fr);
+    padding-block: 0.05rem;
+    height: 100vh;
+    min-height: 100vh;
+  }
+
+  .panel-heading h1 {
+    font-size: clamp(0.98rem, 1.06vw, 1.22rem);
+  }
+
+  .control-panel {
+    gap: 0.24rem;
+    padding: 0.4rem;
+  }
+
+  .plot-panel {
+    padding: 0.5rem;
+  }
+
+  .card {
+    gap: 0.26rem;
+    padding: 0.36rem 0.42rem;
+  }
+
+  .plot-ode-preview {
+    padding: 0.58rem 0.96rem;
+  }
+
+  .equation-input {
+    min-height: 2.45rem;
+  }
+
+  .analysis-value {
+    font-size: 0.76rem;
+  }
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(420px, 72vh);
+    width: min(960px, calc(100vw - 0.8rem));
+    padding-block: 0.4rem;
+  }
+
+  .control-panel,
+  .plot-panel {
+    height: auto;
+  }
+
+  .plot-panel {
+    min-height: 60vh;
+  }
+
+  .plot-stage {
+    min-height: 56vh;
+  }
+
+  .analysis-stack {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    width: min(960px, calc(100vw - 0.45rem));
+    padding-block: 0.22rem;
+    gap: 0.55rem;
+  }
+
+  .control-panel,
+  .plot-panel {
+    padding: 0.52rem;
+    border-radius: 22px;
+  }
+
+  .bounds-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .equation-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .equation-prefix {
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .plot-equation-banner {
+    left: 0.7rem;
+    right: 0.7rem;
+    transform: none;
+  }
+
+  .plot-ode-preview {
+    min-width: 0;
+    width: 100%;
+    padding: 0.74rem 1rem;
+  }
+
+  .plot-ode-preview .katex {
+    font-size: 1rem;
+  }
+
+  .plot-stage {
+    min-height: 54vh;
+  }
+
+  .plot-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.24rem;
+  }
+
+  .button-row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+.playwright-cli/
+output/playwright/
+.vite/*
+!.vite/deps/
+.vite/deps/*
+!.vite/deps/package.json
