@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { computePathArrowPlacements } from "../plot/trajectoryArrows";
-import { createDefaultState, createRandomSeedPoints, EXAMPLE_PRESETS } from "../ui/controller";
+import { createDefaultState, createSampleSeedPoints, EXAMPLE_PRESETS } from "../ui/controller";
 
 describe("computePathArrowPlacements", () => {
   it("places a few arrows along a long path", () => {
@@ -29,24 +29,33 @@ describe("computePathArrowPlacements", () => {
   });
 });
 
-describe("createRandomSeedPoints", () => {
-  it("creates random seeds inside the visible window with a margin", () => {
-    const seeds = createRandomSeedPoints(
+describe("createSampleSeedPoints", () => {
+  it("creates 20 symmetric sample points with slightly denser central coverage", () => {
+    const seeds = createSampleSeedPoints(
       {
         xMin: -5,
         xMax: 5,
         yMin: -4,
         yMax: 4
-      },
-      20
+      }
     );
 
     expect(seeds).toHaveLength(20);
-    expect(
-      seeds.every(
-        (seed) => seed.x >= -4.2 && seed.x <= 4.2 && seed.y >= -3.36 && seed.y <= 3.36
-      )
-    ).toBe(true);
+    expect(seeds[0].x).toBeCloseTo(-3.6, 8);
+    expect(seeds[0].y).toBeCloseTo(-2.88, 8);
+    expect(seeds[4].x).toBeCloseTo(3.6, 8);
+    expect(seeds[4].y).toBeCloseTo(-2.88, 8);
+    expect(seeds[15].x).toBeCloseTo(-3.6, 8);
+    expect(seeds[15].y).toBeCloseTo(2.88, 8);
+    expect(seeds[19].x).toBeCloseTo(3.6, 8);
+    expect(seeds[19].y).toBeCloseTo(2.88, 8);
+    expect(Math.abs(seeds[1].x)).toBeLessThan(1.8);
+    expect(seeds[2].x).toBeCloseTo(0, 8);
+    expect(Math.abs(seeds[3].x)).toBeLessThan(1.8);
+    expect(Math.abs(seeds[5].y)).toBeLessThan(0.96);
+    expect(Math.abs(seeds[10].y)).toBeLessThan(0.96);
+    expect(new Set(seeds.map((seed) => seed.x)).size).toBe(5);
+    expect(new Set(seeds.map((seed) => seed.y)).size).toBe(4);
   });
 });
 
@@ -56,7 +65,8 @@ describe("EXAMPLE_PRESETS", () => {
 
     expect(ids[0]).toBe("saddle");
     expect(ids[ids.length - 1]).toBe("lotka-volterra");
-    expect(ids).not.toContain("limit-cycle");
+    expect(ids[ids.length - 2]).toBe("limit-cycle");
+    expect(ids).toContain("limit-cycle");
     expect(ids).toContain("lotka-volterra");
     expect(ids).toContain("saddle");
     expect(ids).toContain("stable-node");
@@ -78,11 +88,11 @@ describe("EXAMPLE_PRESETS", () => {
 });
 
 describe("createDefaultState", () => {
-  it("opens on the limit-cycle system with no trajectories shown initially", () => {
+  it("opens on the stable improper node system with no trajectories shown initially", () => {
     const state = createDefaultState();
 
-    expect(state.xExpression).toBe("y + x * (1 - x^2 - y^2)");
-    expect(state.yExpression).toBe("-x + y * (1 - x^2 - y^2)");
+    expect(state.xExpression).toBe("-x + y");
+    expect(state.yExpression).toBe("-y");
     expect(state.curveSeeds).toHaveLength(0);
   });
 });

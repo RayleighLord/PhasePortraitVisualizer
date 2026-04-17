@@ -14,8 +14,9 @@ describe("createTrajectoryFlowDescriptor", () => {
     expect(descriptor?.layers).toHaveLength(26);
     expect(descriptor!.concurrentTrainCount).toBeGreaterThan(1);
     expect(descriptor!.cycleLength).toBeLessThan(420);
-    expect(descriptor!.dashLength).toBeGreaterThanOrEqual(8);
-    expect(descriptor!.durationSeconds).toBeLessThan(1.8);
+    expect(descriptor!.dashLength).toBeGreaterThanOrEqual(9);
+    expect(descriptor!.durationSeconds).toBeGreaterThan(0.9);
+    expect(descriptor!.durationSeconds).toBeLessThan(1.2);
     expect(descriptor!.layers[0].gray).toBeGreaterThan(
       descriptor!.layers[descriptor!.layers.length - 1].gray
     );

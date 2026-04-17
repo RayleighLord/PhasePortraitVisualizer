@@ -58,8 +58,8 @@ const DEFAULT_BOUNDS: AxisBounds = {
   yMax: 3
 };
 
-const DEFAULT_X_EXPRESSION = "y + x * (1 - x^2 - y^2)";
-const DEFAULT_Y_EXPRESSION = "-x + y * (1 - x^2 - y^2)";
+const DEFAULT_X_EXPRESSION = "-x + y";
+const DEFAULT_Y_EXPRESSION = "-y";
 
 export const EXAMPLE_PRESETS: ExamplePreset[] = [
   {
@@ -172,6 +172,14 @@ export const EXAMPLE_PRESETS: ExamplePreset[] = [
       5,
       0.14
     )
+  },
+  {
+    id: "limit-cycle",
+    label: "Nonlinear: Limit cycle",
+    xExpression: "y + x * (1 - x^2 - y^2)",
+    yExpression: "-x + y * (1 - x^2 - y^2)",
+    bounds: { ...DEFAULT_BOUNDS },
+    seedPoints: createDenseGridSeedPoints(DEFAULT_BOUNDS, 5, 5)
   },
   {
     id: "lotka-volterra",
@@ -330,10 +338,10 @@ export class AppController {
     this.refresh();
   }
 
-  seedRing(): void {
+  sampleTrajectories(): void {
     this.state = {
       ...this.state,
-      curveSeeds: createRandomSeedPoints(this.state.bounds, 20).map((point) => ({
+      curveSeeds: createSampleSeedPoints(this.state.bounds).map((point) => ({
         id: `curve-${this.seedCounter++}`,
         x: point.x,
         y: point.y
@@ -503,24 +511,31 @@ export function createDefaultState(): AppState {
   };
 }
 
-export function createRandomSeedPoints(
+export function createSampleSeedPoints(
   bounds: AxisBounds,
-  count: number,
-  marginScale = 0.08
+  columns = 5,
+  rows = 4,
+  marginScale = 0.14
 ): StatePoint[] {
   const spanX = bounds.xMax - bounds.xMin;
   const spanY = bounds.yMax - bounds.yMin;
-  const marginX = spanX * marginScale;
-  const marginY = spanY * marginScale;
-  const minX = bounds.xMin + marginX;
-  const maxX = bounds.xMax - marginX;
-  const minY = bounds.yMin + marginY;
-  const maxY = bounds.yMax - marginY;
+  const minX = bounds.xMin + spanX * marginScale;
+  const maxX = bounds.xMax - spanX * marginScale;
+  const minY = bounds.yMin + spanY * marginScale;
+  const maxY = bounds.yMax - spanY * marginScale;
+  const xProgressValues = createCenterBiasedProgressValues(columns, 1.2);
+  const yProgressValues = createCenterBiasedProgressValues(rows, 1.2);
+  const points: StatePoint[] = [];
 
-  return Array.from({ length: count }, () => ({
-    x: interpolate(minX, maxX, Math.random()),
-    y: interpolate(minY, maxY, Math.random())
-  }));
+  for (let row = 0; row < rows; row += 1) {
+    const y = interpolate(minY, maxY, yProgressValues[row]);
+    for (let column = 0; column < columns; column += 1) {
+      const x = interpolate(minX, maxX, xProgressValues[column]);
+      points.push({ x, y });
+    }
+  }
+
+  return points;
 }
 
 function buildNotices(
@@ -562,6 +577,21 @@ function createUnavailableAnalysis(message: string): PhasePortraitAnalysis {
 
 function interpolate(start: number, end: number, progress: number): number {
   return start + (end - start) * progress;
+}
+
+function createCenterBiasedProgressValues(count: number, power: number): number[] {
+  if (count <= 1) {
+    return [0.5];
+  }
+
+  return Array.from({ length: count }, (_, index) => {
+    const linearProgress = index / (count - 1);
+    const centeredProgress = linearProgress * 2 - 1;
+    const curvedProgress =
+      Math.sign(centeredProgress) * Math.pow(Math.abs(centeredProgress), power);
+
+    return (curvedProgress + 1) / 2;
+  });
 }
 
 function serializeSystemContext(

@@ -11,3 +11,5 @@ x' &= f(x,y) \\
 y' &= g(x,y)
 \end{aligned}
 $$
+
+[![Animated showcase of the Phase Portrait Explorer](docs/phase-portrait-explorer-showcase.gif)](https://rayleighlord.github.io/PhasePortraitVisualizer/)

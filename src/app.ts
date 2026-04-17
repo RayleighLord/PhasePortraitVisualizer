@@ -127,7 +127,7 @@ export function startApp(): void {
   });
 
   seedRingButton.addEventListener("click", () => {
-    controller.seedRing();
+    controller.sampleTrajectories();
   });
   trajectoryAnimationToggle.addEventListener("change", () => {
     controller.setShowTrajectoryAnimation(trajectoryAnimationToggle.checked);

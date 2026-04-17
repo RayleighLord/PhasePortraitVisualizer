@@ -23,10 +23,10 @@ export function createTrajectoryFlowDescriptor(
     return null;
   }
 
-  const dashLength = clamp(screenArcLength * 0.019, 8.6, 12.8);
-  const spacing = clamp(dashLength * 0.56, 4.8, 6.8);
+  const dashLength = clamp(screenArcLength * 0.0205, 9.2, 13.6);
+  const spacing = clamp(dashLength * 0.56, 5.0, 7.0);
   const tailLength = dashLength + spacing * (FLOW_LAYER_COUNT - 1);
-  const minimumTrainGap = clamp(dashLength * 1.05, 8.5, 12.5);
+  const minimumTrainGap = clamp(dashLength * 1.08, 8.9, 13.0);
   const concurrentTrainCount = selectConcurrentTrainCount(
     screenArcLength,
     tailLength,
@@ -36,7 +36,7 @@ export function createTrajectoryFlowDescriptor(
     concurrentTrainCount === 1
       ? screenArcLength + Math.max(screenArcLength * 0.24, tailLength * 0.42, 38)
       : screenArcLength / concurrentTrainCount;
-  const durationSeconds = clamp(cycleLength / 235, 0.62, 2.35);
+  const durationSeconds = clamp(cycleLength / 222, 0.66, 2.5);
   const layers = Array.from({ length: FLOW_LAYER_COUNT }, (_, index) => {
     const progress = index / Math.max(FLOW_LAYER_COUNT - 1, 1);
     return {
