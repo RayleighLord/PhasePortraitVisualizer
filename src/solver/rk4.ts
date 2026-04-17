@@ -11,6 +11,7 @@ import type {
 interface TraceResult {
   points: StatePoint[];
   terminationReason: TerminationReason;
+  arcLength: number;
 }
 
 export function createSolverSettings(bounds: AxisBounds): SolverSettings {
@@ -47,7 +48,7 @@ export function solveTrajectory(
     seed,
     points,
     terminationReason: selectTerminationReason(backward, forward),
-    totalArcLength: computeArcLength(points)
+    totalArcLength: backward.arcLength + forward.arcLength
   };
 }
 
@@ -68,16 +69,16 @@ function traceDirection(
     const speed = Math.hypot(vector.dx, vector.dy);
 
     if (!Number.isFinite(speed)) {
-      return { points, terminationReason: "invalid-value" };
+      return { points, terminationReason: "invalid-value", arcLength };
     }
 
     const stepSize = selectStepSize(speed, settings) * direction;
 
     try {
-      const next = rk4Step(system, current, stepSize);
+      const next = rk4Step(system, current, stepSize, vector);
 
       if (!Number.isFinite(next.x) || !Number.isFinite(next.y)) {
-        return { points, terminationReason: "invalid-value" };
+        return { points, terminationReason: "invalid-value", arcLength };
       }
 
       if (
@@ -86,34 +87,37 @@ function traceDirection(
       ) {
         const clipped = clipSegmentToBounds(current, next, bounds);
         if (clipped) {
+          arcLength += Math.hypot(clipped.x - current.x, clipped.y - current.y);
           points.push(clipped);
         }
-        return { points, terminationReason: "escaped-plot" };
+        return { points, terminationReason: "escaped-plot", arcLength };
       }
 
       if (!isPointInsideBounds(next, bounds)) {
         const clipped = clipSegmentToBounds(current, next, bounds);
         if (clipped) {
+          arcLength += Math.hypot(clipped.x - current.x, clipped.y - current.y);
           points.push(clipped);
         }
-        return { points, terminationReason: "escaped-plot" };
+        return { points, terminationReason: "escaped-plot", arcLength };
       }
 
-      arcLength += Math.hypot(next.x - current.x, next.y - current.y);
+      const segmentLength = Math.hypot(next.x - current.x, next.y - current.y);
+      arcLength += segmentLength;
       if (arcLength >= settings.maxArcLength) {
         points.push(next);
-        return { points, terminationReason: "length-limit" };
+        return { points, terminationReason: "length-limit", arcLength };
       }
 
       points.push(next);
       current = next;
       steps += 1;
     } catch {
-      return { points, terminationReason: "solver-error" };
+      return { points, terminationReason: "solver-error", arcLength };
     }
   }
 
-  return { points, terminationReason: "max-steps" };
+  return { points, terminationReason: "max-steps", arcLength };
 }
 
 function selectStepSize(speed: number, settings: SolverSettings): number {
@@ -124,9 +128,10 @@ function selectStepSize(speed: number, settings: SolverSettings): number {
 function rk4Step(
   system: CompiledSystem,
   state: StatePoint,
-  stepSize: number
+  stepSize: number,
+  initialVector: { dx: number; dy: number }
 ): StatePoint {
-  const k1 = system.evaluate(state.x, state.y);
+  const k1 = initialVector;
   const k2 = system.evaluate(
     state.x + (stepSize * k1.dx) / 2,
     state.y + (stepSize * k1.dy) / 2
@@ -140,8 +145,16 @@ function rk4Step(
     state.y + stepSize * k3.dy
   );
 
-  const values = [k1.dx, k1.dy, k2.dx, k2.dy, k3.dx, k3.dy, k4.dx, k4.dy];
-  if (!values.every(Number.isFinite)) {
+  if (
+    !Number.isFinite(k1.dx) ||
+    !Number.isFinite(k1.dy) ||
+    !Number.isFinite(k2.dx) ||
+    !Number.isFinite(k2.dy) ||
+    !Number.isFinite(k3.dx) ||
+    !Number.isFinite(k3.dy) ||
+    !Number.isFinite(k4.dx) ||
+    !Number.isFinite(k4.dy)
+  ) {
     throw new Error("Encountered a non-finite vector field evaluation.");
   }
 
@@ -203,16 +216,6 @@ function isPointInsideBounds(point: StatePoint, bounds: AxisBounds): boolean {
     point.y >= bounds.yMin &&
     point.y <= bounds.yMax
   );
-}
-
-function computeArcLength(points: StatePoint[]): number {
-  let total = 0;
-
-  for (let index = 1; index < points.length; index += 1) {
-    total += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
-  }
-
-  return total;
 }
 
 function selectTerminationReason(

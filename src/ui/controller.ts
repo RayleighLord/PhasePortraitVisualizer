@@ -11,6 +11,7 @@ import type {
   EquilibriumPointAnalysis,
   JacobianMatrix,
   PhasePortraitAnalysis,
+  SolverSettings,
   StatePoint,
   Trajectory,
   TrajectorySeed
@@ -34,6 +35,20 @@ export interface ExamplePreset {
   yExpression: string;
   bounds: AxisBounds;
   seedPoints: StatePoint[];
+}
+
+interface BaseViewComputation {
+  key: string;
+  compiledSystem: CompiledSystem | null;
+  equationError: string | null;
+  solverSettings: SolverSettings | null;
+  analysis: PhasePortraitAnalysis;
+}
+
+interface ProjectedAnalysisCacheEntry {
+  baseAnalysis: PhasePortraitAnalysis;
+  selectedIndex: number | null;
+  analysis: PhasePortraitAnalysis;
 }
 
 const DEFAULT_BOUNDS: AxisBounds = {
@@ -188,10 +203,15 @@ export class AppController {
   private viewModel: ViewModel;
   private readonly listeners = new Set<Listener>();
   private seedCounter = 1;
+  private baseViewComputationCache: BaseViewComputation | null = null;
+  private projectedAnalysisCache: ProjectedAnalysisCacheEntry | null = null;
+  private trajectoryCacheContextKey: string | null = null;
+  private trajectorySeedListKey: string | null = null;
+  private trajectoryCache = new Map<string, Trajectory>();
 
   constructor(initialState = createDefaultState()) {
     this.state = initialState;
-    this.viewModel = deriveViewModel(this.state);
+    this.viewModel = this.buildViewModel(this.state);
     this.seedCounter = initialState.curveSeeds.length + 1;
   }
 
@@ -220,7 +240,7 @@ export class AppController {
 
   setSelectedEquilibriumIndex(index: number | null): void {
     const { selectedIndex, analysis } = projectAnalysisForSelectedIndex(
-      this.viewModel.analysis,
+      this.baseViewComputationCache?.analysis ?? this.viewModel.analysis,
       index
     );
 
@@ -234,6 +254,11 @@ export class AppController {
         ...this.viewModel.state,
         selectedEquilibriumIndex: selectedIndex
       },
+      analysis
+    };
+    this.projectedAnalysisCache = {
+      baseAnalysis: this.baseViewComputationCache?.analysis ?? analysis,
+      selectedIndex,
       analysis
     };
     this.listeners.forEach((listener) => listener(this.viewModel));
@@ -340,8 +365,128 @@ export class AppController {
   }
 
   private refresh(): void {
-    this.viewModel = deriveViewModel(this.state);
+    this.viewModel = this.buildViewModel(this.state);
     this.listeners.forEach((listener) => listener(this.viewModel));
+  }
+
+  private buildViewModel(state: AppState): ViewModel {
+    const baseViewComputation = this.getBaseViewComputation(state);
+    const projectedAnalysis = this.getProjectedAnalysis(
+      state.selectedEquilibriumIndex,
+      baseViewComputation.analysis
+    );
+
+    return {
+      state,
+      compiledSystem: baseViewComputation.compiledSystem,
+      equationError: baseViewComputation.equationError,
+      trajectories: this.getTrajectories(state, baseViewComputation),
+      analysis: projectedAnalysis.analysis,
+      notices: buildNotices(state.boundsError, baseViewComputation.equationError, projectedAnalysis.analysis)
+    };
+  }
+
+  private getBaseViewComputation(state: AppState): BaseViewComputation {
+    const cacheKey = serializeSystemContext(state.xExpression, state.yExpression, state.bounds);
+    if (this.baseViewComputationCache?.key === cacheKey) {
+      return this.baseViewComputationCache;
+    }
+
+    let compiledSystem: CompiledSystem | null = null;
+    let equationError: string | null = null;
+
+    try {
+      compiledSystem = compileSystem(state.xExpression, state.yExpression);
+    } catch (error) {
+      equationError = formatExpressionError(error);
+    }
+
+    const analysis =
+      compiledSystem && !equationError
+        ? ensureSaddleNodePresetOriginAnalysis(
+            analyzeSystem(compiledSystem, state.bounds),
+            state
+          )
+        : createUnavailableAnalysis("Enter a valid system to inspect the local phase portrait.");
+
+    const nextCacheEntry = {
+      key: cacheKey,
+      compiledSystem,
+      equationError,
+      solverSettings: compiledSystem && !equationError ? createSolverSettings(state.bounds) : null,
+      analysis
+    } satisfies BaseViewComputation;
+
+    this.baseViewComputationCache = nextCacheEntry;
+    return nextCacheEntry;
+  }
+
+  private getProjectedAnalysis(
+    selectedIndex: number | null,
+    baseAnalysis: PhasePortraitAnalysis
+  ): { selectedIndex: number | null; analysis: PhasePortraitAnalysis } {
+    const projectedAnalysis = projectAnalysisForSelectedIndex(baseAnalysis, selectedIndex);
+    const cached = this.projectedAnalysisCache;
+
+    if (
+      cached &&
+      cached.baseAnalysis === baseAnalysis &&
+      cached.selectedIndex === projectedAnalysis.selectedIndex
+    ) {
+      return {
+        selectedIndex: cached.selectedIndex,
+        analysis: cached.analysis
+      };
+    }
+
+    this.projectedAnalysisCache = {
+      baseAnalysis,
+      selectedIndex: projectedAnalysis.selectedIndex,
+      analysis: projectedAnalysis.analysis
+    };
+
+    return projectedAnalysis;
+  }
+
+  private getTrajectories(
+    state: AppState,
+    baseViewComputation: BaseViewComputation
+  ): Trajectory[] {
+    const { compiledSystem, equationError, solverSettings, key } = baseViewComputation;
+    if (!compiledSystem || equationError || !solverSettings) {
+      this.trajectorySeedListKey = null;
+      return [];
+    }
+
+    if (this.trajectoryCacheContextKey !== key) {
+      this.trajectoryCacheContextKey = key;
+      this.trajectorySeedListKey = null;
+      this.trajectoryCache = new Map();
+    }
+
+    const seedListKey = serializeCurveSeedList(state.curveSeeds);
+    if (this.trajectorySeedListKey === seedListKey) {
+      return this.viewModel.trajectories;
+    }
+
+    const nextTrajectoryCache = new Map<string, Trajectory>();
+    const trajectories = state.curveSeeds.map((seed) => {
+      const seedKey = serializeSeed(seed);
+      const cachedTrajectory = this.trajectoryCache.get(seedKey);
+      if (cachedTrajectory) {
+        nextTrajectoryCache.set(seedKey, cachedTrajectory);
+        return cachedTrajectory;
+      }
+
+      const trajectory = solveTrajectory(seed, state.bounds, compiledSystem, solverSettings);
+      nextTrajectoryCache.set(seedKey, trajectory);
+      return trajectory;
+    });
+
+    this.trajectoryCache = nextTrajectoryCache;
+    this.trajectorySeedListKey = seedListKey;
+
+    return trajectories;
   }
 }
 
@@ -378,60 +523,25 @@ export function createRandomSeedPoints(
   }));
 }
 
-function deriveViewModel(state: AppState): ViewModel {
-  let compiledSystem: CompiledSystem | null = null;
-  let equationError: string | null = null;
-
-  try {
-    compiledSystem = compileSystem(state.xExpression, state.yExpression);
-  } catch (error) {
-    equationError = formatExpressionError(error);
-  }
-
+function buildNotices(
+  boundsError: string | null,
+  equationError: string | null,
+  analysis: PhasePortraitAnalysis
+): AppNotice[] {
   const notices: AppNotice[] = [];
-  if (state.boundsError) {
-    notices.push({ tone: "error", text: state.boundsError });
+  if (boundsError) {
+    notices.push({ tone: "error", text: boundsError });
   }
 
   if (equationError) {
     notices.push({ tone: "error", text: equationError });
   }
 
-  const analysis =
-    compiledSystem && !equationError
-      ? ensureSaddleNodePresetOriginAnalysis(
-          analyzeSystem(compiledSystem, state.bounds),
-          state
-        )
-      : createUnavailableAnalysis("Enter a valid system to inspect the local phase portrait.");
-
-  const projectedAnalysis = projectAnalysisForSelectedIndex(
-    analysis,
-    state.selectedEquilibriumIndex
-  );
-
-  const solverSettings =
-    compiledSystem && !equationError ? createSolverSettings(state.bounds) : null;
-
-  if (compiledSystem && !equationError && projectedAnalysis.analysis.availability === "unavailable") {
-    notices.push({ tone: "warning", text: projectedAnalysis.analysis.message });
+  if (!equationError && analysis.availability === "unavailable") {
+    notices.push({ tone: "warning", text: analysis.message });
   }
 
-  const trajectories =
-    compiledSystem && !equationError && solverSettings
-      ? state.curveSeeds.map((seed) =>
-          solveTrajectory(seed, state.bounds, compiledSystem!, solverSettings)
-        )
-      : [];
-
-  return {
-    state,
-    compiledSystem,
-    equationError,
-    trajectories,
-    analysis: projectedAnalysis.analysis,
-    notices
-  };
+  return notices;
 }
 
 function createUnavailableAnalysis(message: string): PhasePortraitAnalysis {
@@ -452,6 +562,22 @@ function createUnavailableAnalysis(message: string): PhasePortraitAnalysis {
 
 function interpolate(start: number, end: number, progress: number): number {
   return start + (end - start) * progress;
+}
+
+function serializeSystemContext(
+  xExpression: string,
+  yExpression: string,
+  bounds: AxisBounds
+): string {
+  return `${xExpression}||${yExpression}||${bounds.xMin}|${bounds.xMax}|${bounds.yMin}|${bounds.yMax}`;
+}
+
+function serializeCurveSeedList(seeds: readonly TrajectorySeed[]): string {
+  return seeds.map(serializeSeed).join("::");
+}
+
+function serializeSeed(seed: TrajectorySeed): string {
+  return `${seed.id}|${seed.x}|${seed.y}`;
 }
 
 function createDenseGridSeedPoints(

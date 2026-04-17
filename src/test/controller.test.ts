@@ -3,6 +3,20 @@ import { describe, expect, it } from "vitest";
 import { AppController } from "../ui/controller";
 
 describe("AppController UI-only updates", () => {
+  it("reuses previously solved trajectories when adding a new curve", () => {
+    const controller = new AppController();
+    controller.addCurveSeed({ x: 1.4, y: 0.2 });
+
+    const before = controller.getViewModel();
+    controller.addCurveSeed({ x: -1.1, y: 0.7 });
+    const after = controller.getViewModel();
+
+    expect(after.trajectories).toHaveLength(2);
+    expect(after.trajectories[0]).toBe(before.trajectories[0]);
+    expect(after.compiledSystem).toBe(before.compiledSystem);
+    expect(after.analysis).toBe(before.analysis);
+  });
+
   it("does not recompute trajectories when toggling flow animation", () => {
     const controller = new AppController();
     controller.addCurveSeed({ x: 1.4, y: 0.2 });

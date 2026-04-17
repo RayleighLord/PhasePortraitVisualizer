@@ -37,6 +37,10 @@ export class PhasePortraitRenderer {
   private previousAnalysis: ViewModel["analysis"] | null = null;
   private previousTrajectories: Trajectory[] | null = null;
   private previousShowTrajectoryAnimation: boolean | null = null;
+  private readonly trajectoryGeometryCache = new WeakMap<
+    Trajectory,
+    RenderedTrajectoryGeometryCacheEntry
+  >();
 
   constructor(svg: SVGSVGElement) {
     this.svg = svg;
@@ -119,7 +123,9 @@ export class PhasePortraitRenderer {
 
     if (boundsChanged || trajectoriesChanged || animationChanged) {
       const renderedPaths = viewModel.trajectories
-        .map((trajectory, index) => buildRenderedTrajectoryPath(coordinates, trajectory, index))
+        .map((trajectory, index) =>
+          this.buildRenderedTrajectoryPath(coordinates, boundsKey, trajectory, index)
+        )
         .filter((path): path is RenderedTrajectoryPath => path !== null);
 
       this.renderCurves(renderedPaths, viewModel.state.showTrajectoryAnimation);
@@ -568,6 +574,56 @@ export class PhasePortraitRenderer {
       .map((value) => value.toFixed(4))
       .join("|");
   }
+
+  private buildRenderedTrajectoryPath(
+    coordinates: CoordinateSystem,
+    boundsKey: string,
+    trajectory: Trajectory,
+    index: number
+  ): RenderedTrajectoryPath | null {
+    const geometry = this.getRenderedTrajectoryGeometry(coordinates, boundsKey, trajectory);
+    if (!geometry) {
+      return null;
+    }
+
+    return {
+      pathData: geometry.pathData,
+      screenArcLength: geometry.screenArcLength,
+      palette: CURVE_PALETTE[index % CURVE_PALETTE.length],
+      phaseOffset: fractionalPart(index * 0.61803398875)
+    };
+  }
+
+  private getRenderedTrajectoryGeometry(
+    coordinates: CoordinateSystem,
+    boundsKey: string,
+    trajectory: Trajectory
+  ): RenderedTrajectoryGeometry | null {
+    const cached = this.trajectoryGeometryCache.get(trajectory);
+    if (cached?.boundsKey === boundsKey) {
+      return cached.geometry;
+    }
+
+    const svgPoints = trajectory.points.map((point) => coordinates.modelToSvg(point));
+    const geometry =
+      svgPoints.length < 2
+        ? null
+        : {
+            pathData: svgPoints
+              .map((point, pointIndex) => {
+                return `${pointIndex === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+              })
+              .join(" "),
+            screenArcLength: computePolylineLength(svgPoints)
+          };
+
+    this.trajectoryGeometryCache.set(trajectory, {
+      boundsKey,
+      geometry
+    });
+
+    return geometry;
+  }
 }
 
 interface RenderedTrajectoryPath {
@@ -575,6 +631,16 @@ interface RenderedTrajectoryPath {
   screenArcLength: number;
   palette: (typeof CURVE_PALETTE)[number];
   phaseOffset: number;
+}
+
+interface RenderedTrajectoryGeometry {
+  pathData: string;
+  screenArcLength: number;
+}
+
+interface RenderedTrajectoryGeometryCacheEntry {
+  boundsKey: string;
+  geometry: RenderedTrajectoryGeometry | null;
 }
 
 function createSvgElement<TagName extends keyof SVGElementTagNameMap>(
@@ -625,28 +691,6 @@ function normalizeVector(vector: { x: number; y: number }): { x: number; y: numb
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
-}
-
-function buildRenderedTrajectoryPath(
-  coordinates: CoordinateSystem,
-  trajectory: Trajectory,
-  index: number
-): RenderedTrajectoryPath | null {
-  const svgPoints = trajectory.points.map((point) => coordinates.modelToSvg(point));
-  if (svgPoints.length < 2) {
-    return null;
-  }
-
-  return {
-    pathData: svgPoints
-      .map((point, pointIndex) => {
-        return `${pointIndex === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
-      })
-      .join(" "),
-    screenArcLength: computePolylineLength(svgPoints),
-    palette: CURVE_PALETTE[index % CURVE_PALETTE.length],
-    phaseOffset: fractionalPart(index * 0.61803398875)
-  };
 }
 
 function formatGrayscaleStroke(gray: number, alpha: number): string {
