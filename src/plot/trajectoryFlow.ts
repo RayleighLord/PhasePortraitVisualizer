@@ -13,8 +13,7 @@ export interface TrajectoryFlowDescriptor {
   layers: TrajectoryFlowLayerDescriptor[];
 }
 
-const MIN_VISIBLE_FLOW_LENGTH = 44;
-const FLOW_LAYER_COUNT = 26;
+const MIN_VISIBLE_FLOW_LENGTH = 52;
 
 export function createTrajectoryFlowDescriptor(
   screenArcLength: number
@@ -23,10 +22,11 @@ export function createTrajectoryFlowDescriptor(
     return null;
   }
 
-  const dashLength = clamp(screenArcLength * 0.0205, 9.2, 13.6);
-  const spacing = clamp(dashLength * 0.56, 5.0, 7.0);
-  const tailLength = dashLength + spacing * (FLOW_LAYER_COUNT - 1);
-  const minimumTrainGap = clamp(dashLength * 1.08, 8.9, 13.0);
+  const layerCount = selectFlowLayerCount(screenArcLength);
+  const dashLength = clamp(screenArcLength * 0.0185, 9.6, 13.8);
+  const spacing = clamp(dashLength * 0.72, 6.1, 8.6);
+  const tailLength = dashLength + spacing * (layerCount - 1);
+  const minimumTrainGap = clamp(dashLength * 1.25, 10.5, 16.0);
   const concurrentTrainCount = selectConcurrentTrainCount(
     screenArcLength,
     tailLength,
@@ -34,15 +34,15 @@ export function createTrajectoryFlowDescriptor(
   );
   const cycleLength =
     concurrentTrainCount === 1
-      ? screenArcLength + Math.max(screenArcLength * 0.24, tailLength * 0.42, 38)
+      ? screenArcLength + Math.max(screenArcLength * 0.16, tailLength * 0.55, 42)
       : screenArcLength / concurrentTrainCount;
-  const durationSeconds = clamp(cycleLength / 222, 0.66, 2.5);
-  const layers = Array.from({ length: FLOW_LAYER_COUNT }, (_, index) => {
-    const progress = index / Math.max(FLOW_LAYER_COUNT - 1, 1);
+  const durationSeconds = clamp(cycleLength / 236, 0.72, 2.3);
+  const layers = Array.from({ length: layerCount }, (_, index) => {
+    const progress = index / Math.max(layerCount - 1, 1);
     return {
-      gray: Math.round(interpolate(246, 10, progress)),
-      alpha: interpolate(0.05, 0.985, progress),
-      strokeWidth: interpolate(2.65, 4.95, progress),
+      gray: Math.round(interpolate(244, 18, progress)),
+      alpha: interpolate(0.08, 0.955, progress),
+      strokeWidth: interpolate(2.6, 4.7, progress),
       startOffset: -spacing * index
     };
   });
@@ -58,16 +58,30 @@ export function createTrajectoryFlowDescriptor(
 
 export function computePolylineLength(points: Array<{ x: number; y: number }>): number {
   let total = 0;
-
   for (let index = 1; index < points.length; index += 1) {
     total += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
   }
-
   return total;
 }
 
 function interpolate(start: number, end: number, progress: number): number {
   return start + (end - start) * progress;
+}
+
+function selectFlowLayerCount(screenArcLength: number): number {
+  if (screenArcLength < 120) {
+    return 4;
+  }
+  if (screenArcLength < 220) {
+    return 5;
+  }
+  if (screenArcLength < 360) {
+    return 6;
+  }
+  if (screenArcLength < 540) {
+    return 7;
+  }
+  return 8;
 }
 
 function selectConcurrentTrainCount(
@@ -76,21 +90,11 @@ function selectConcurrentTrainCount(
   minimumTrainGap: number
 ): number {
   let count = 1;
-
-  if (screenArcLength >= 170) {
+  if (screenArcLength >= 260) {
     count = 2;
   }
-
-  if (screenArcLength >= 320) {
+  if (screenArcLength >= 620) {
     count = 3;
-  }
-
-  if (screenArcLength >= 510) {
-    count = 4;
-  }
-
-  if (screenArcLength >= 760) {
-    count = 5;
   }
 
   while (count > 1 && screenArcLength / count < tailLength + minimumTrainGap) {

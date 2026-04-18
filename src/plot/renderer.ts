@@ -19,6 +19,8 @@ const CURVE_PALETTE = [
   { stroke: "#68707a", seed: "#68707a", halo: "rgba(104, 112, 122, 0.16)" },
   { stroke: "#1d252d", seed: "#1d252d", halo: "rgba(29, 37, 45, 0.16)" }
 ] as const;
+const TRAJECTORY_SIMPLIFICATION_TOLERANCE = 0.8;
+const VECTOR_FIELD_COLOR_BUCKET_COUNT = 16;
 
 export class PhasePortraitRenderer {
   private readonly svg: SVGSVGElement;
@@ -27,6 +29,7 @@ export class PhasePortraitRenderer {
   private readonly axisLayer: SVGGElement;
   private readonly fieldLayer: SVGGElement;
   private readonly analysisLayer: SVGGElement;
+  private readonly geometryDefsLayer: SVGDefsElement;
   private readonly curveLayer: SVGGElement;
   private readonly flowLayer: SVGGElement;
   private readonly annotationLayer: HTMLDivElement;
@@ -61,6 +64,7 @@ export class PhasePortraitRenderer {
     this.axisLayer = createSvgElement("g", { "data-layer": "axes" });
     this.fieldLayer = createSvgElement("g", { "data-layer": "field" });
     this.analysisLayer = createSvgElement("g", { "data-layer": "analysis" });
+    this.geometryDefsLayer = createSvgElement("defs", { "data-layer": "trajectory-geometry-definitions" });
     this.curveLayer = createSvgElement("g", { "data-layer": "curves" });
     this.flowLayer = createSvgElement("g", { "data-layer": "trajectory-flow" });
     this.annotationLayer = document.createElement("div");
@@ -78,6 +82,7 @@ export class PhasePortraitRenderer {
       this.axisLayer,
       this.fieldLayer,
       this.analysisLayer,
+      this.geometryDefsLayer,
       this.curveLayer,
       this.flowLayer
     );
@@ -127,6 +132,10 @@ export class PhasePortraitRenderer {
           this.buildRenderedTrajectoryPath(coordinates, boundsKey, trajectory, index)
         )
         .filter((path): path is RenderedTrajectoryPath => path !== null);
+
+      if (boundsChanged || trajectoriesChanged) {
+        this.renderTrajectoryGeometryDefinitions(renderedPaths);
+      }
 
       this.renderCurves(renderedPaths, viewModel.state.showTrajectoryAnimation);
       this.renderTrajectoryFlow(renderedPaths, viewModel.state.showTrajectoryAnimation);
@@ -278,14 +287,24 @@ export class PhasePortraitRenderer {
     }
 
     const columns = density;
-    const rows = Math.max(10, Math.round((coordinates.innerHeight / coordinates.innerWidth) * density));
+    const rows = Math.max(
+      10,
+      Math.round((coordinates.innerHeight / coordinates.innerWidth) * density)
+    );
     const screenSpacing = Math.min(
       coordinates.innerWidth / Math.max(columns, 2),
       coordinates.innerHeight / Math.max(rows, 2)
     );
     const arrowLength = screenSpacing * 0.7;
     const samples = sampleVectorField(bounds, system, { columns, rows });
-    const nodes: SVGElement[] = [];
+    const shaftCommands = Array.from(
+      { length: VECTOR_FIELD_COLOR_BUCKET_COUNT },
+      () => [] as string[]
+    );
+    const headCommands = Array.from(
+      { length: VECTOR_FIELD_COLOR_BUCKET_COUNT },
+      () => [] as string[]
+    );
 
     for (const sample of samples) {
       const screenVector = normalizeVector({
@@ -314,26 +333,49 @@ export class PhasePortraitRenderer {
         x: -screenVector.y,
         y: screenVector.x
       };
-      const color = colorForStrength(sample.strength);
+      const headLeft = {
+        x: headBase.x + normal.x * 4.8,
+        y: headBase.y + normal.y * 4.8
+      };
+      const headRight = {
+        x: headBase.x - normal.x * 4.8,
+        y: headBase.y - normal.y * 4.8
+      };
+      const bucketIndex = quantizeUnitInterval(
+        sample.strength,
+        VECTOR_FIELD_COLOR_BUCKET_COUNT
+      );
 
+      shaftCommands[bucketIndex].push(
+        `M ${tail.x.toFixed(2)} ${tail.y.toFixed(2)} L ${headBase.x.toFixed(2)} ${headBase.y.toFixed(2)}`
+      );
+      headCommands[bucketIndex].push(
+        `M ${tip.x.toFixed(2)} ${tip.y.toFixed(2)} L ${headLeft.x.toFixed(2)} ${headLeft.y.toFixed(2)} L ${headRight.x.toFixed(2)} ${headRight.y.toFixed(2)} Z`
+      );
+    }
+
+    const nodes: SVGElement[] = [];
+    for (let bucketIndex = 0; bucketIndex < VECTOR_FIELD_COLOR_BUCKET_COUNT; bucketIndex += 1) {
+      if (shaftCommands[bucketIndex].length === 0) {
+        continue;
+      }
+
+      const color = colorForStrength(
+        bucketIndex / Math.max(VECTOR_FIELD_COLOR_BUCKET_COUNT - 1, 1)
+      );
       nodes.push(
-        createSvgElement("line", {
-          x1: `${tail.x}`,
-          y1: `${tail.y}`,
-          x2: `${headBase.x}`,
-          y2: `${headBase.y}`,
+        createSvgElement("path", {
+          d: shaftCommands[bucketIndex].join(" "),
+          fill: "none",
           stroke: color,
           "stroke-width": "2.1",
           "stroke-linecap": "round",
           opacity: "0.9"
         }),
-        createSvgElement("polygon", {
-          points: [
-            `${tip.x},${tip.y}`,
-            `${headBase.x + normal.x * 4.8},${headBase.y + normal.y * 4.8}`,
-            `${headBase.x - normal.x * 4.8},${headBase.y - normal.y * 4.8}`
-          ].join(" "),
+        createSvgElement("path", {
+          d: headCommands[bucketIndex].join(" "),
           fill: color,
+          stroke: "none",
           opacity: "0.95"
         })
       );
@@ -377,6 +419,18 @@ export class PhasePortraitRenderer {
     this.analysisLayer.replaceChildren(...nodes);
   }
 
+  private renderTrajectoryGeometryDefinitions(renderedPaths: RenderedTrajectoryPath[]): void {
+    const nodes = renderedPaths.map((renderedPath) =>
+      createSvgElement("path", {
+        id: renderedPath.definitionId,
+        d: renderedPath.pathData,
+        fill: "none"
+      })
+    );
+
+    this.geometryDefsLayer.replaceChildren(...nodes);
+  }
+
   private renderCurves(
     renderedPaths: RenderedTrajectoryPath[],
     showTrajectoryAnimation: boolean
@@ -385,8 +439,9 @@ export class PhasePortraitRenderer {
 
     renderedPaths.forEach((renderedPath) => {
       nodes.push(
-        createSvgElement("path", {
-          d: renderedPath.pathData,
+        createSvgElement("use", {
+          href: `#${renderedPath.definitionId}`,
+          "xlink:href": `#${renderedPath.definitionId}`,
           fill: "none",
           stroke: showTrajectoryAnimation ? "rgba(152, 160, 169, 0.46)" : renderedPath.palette.stroke,
           "stroke-width": showTrajectoryAnimation ? "4.45" : "4.55",
@@ -428,8 +483,9 @@ export class PhasePortraitRenderer {
       flowDescriptor.layers.forEach((layer) => {
         const startOffset = layer.startOffset - trajectoryPhaseShift;
         nodes.push(
-          createSvgElement("path", {
-            d: renderedPath.pathData,
+          createSvgElement("use", {
+            href: `#${renderedPath.definitionId}`,
+            "xlink:href": `#${renderedPath.definitionId}`,
             fill: "none",
             stroke: formatGrayscaleStroke(layer.gray, layer.alpha),
             "stroke-width": `${layer.strokeWidth.toFixed(2)}`,
@@ -587,6 +643,7 @@ export class PhasePortraitRenderer {
     }
 
     return {
+      definitionId: buildTrajectoryDefinitionId(trajectory.id),
       pathData: geometry.pathData,
       screenArcLength: geometry.screenArcLength,
       palette: CURVE_PALETTE[index % CURVE_PALETTE.length],
@@ -604,17 +661,20 @@ export class PhasePortraitRenderer {
       return cached.geometry;
     }
 
-    const svgPoints = trajectory.points.map((point) => coordinates.modelToSvg(point));
+    const simplifiedPoints = simplifySvgPolyline(
+      trajectory.points.map((point) => coordinates.modelToSvg(point)),
+      TRAJECTORY_SIMPLIFICATION_TOLERANCE
+    );
     const geometry =
-      svgPoints.length < 2
+      simplifiedPoints.length < 2
         ? null
         : {
-            pathData: svgPoints
+            pathData: simplifiedPoints
               .map((point, pointIndex) => {
                 return `${pointIndex === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
               })
               .join(" "),
-            screenArcLength: computePolylineLength(svgPoints)
+            screenArcLength: computePolylineLength(simplifiedPoints)
           };
 
     this.trajectoryGeometryCache.set(trajectory, {
@@ -627,6 +687,7 @@ export class PhasePortraitRenderer {
 }
 
 interface RenderedTrajectoryPath {
+  definitionId: string;
   pathData: string;
   screenArcLength: number;
   palette: (typeof CURVE_PALETTE)[number];
@@ -689,6 +750,11 @@ function normalizeVector(vector: { x: number; y: number }): { x: number; y: numb
   };
 }
 
+function quantizeUnitInterval(value: number, bucketCount: number): number {
+  const normalized = clamp(value, 0, 1);
+  return Math.min(bucketCount - 1, Math.max(0, Math.round(normalized * (bucketCount - 1))));
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -700,6 +766,132 @@ function formatGrayscaleStroke(gray: number, alpha: number): string {
 
 function serializeBounds(bounds: ViewModel["state"]["bounds"]): string {
   return `${bounds.xMin}|${bounds.xMax}|${bounds.yMin}|${bounds.yMax}`;
+}
+
+function buildTrajectoryDefinitionId(seedId: string): string {
+  return `trajectory-geometry-${seedId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function simplifySvgPolyline(
+  points: Array<{ x: number; y: number }>,
+  tolerance: number
+): Array<{ x: number; y: number }> {
+  if (points.length <= 2 || !Number.isFinite(tolerance) || tolerance <= 0) {
+    return points;
+  }
+
+  const squaredTolerance = tolerance * tolerance;
+  const radialSimplified = simplifyByRadialDistance(points, squaredTolerance);
+  return simplifyByDouglasPeucker(radialSimplified, squaredTolerance);
+}
+
+function simplifyByRadialDistance(
+  points: Array<{ x: number; y: number }>,
+  squaredTolerance: number
+): Array<{ x: number; y: number }> {
+  const simplified = [points[0]];
+  let previousPoint = points[0];
+
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const point = points[index];
+    if (computeSquaredDistance(point, previousPoint) > squaredTolerance) {
+      simplified.push(point);
+      previousPoint = point;
+    }
+  }
+
+  const lastPoint = points[points.length - 1];
+  if (lastPoint !== previousPoint) {
+    simplified.push(lastPoint);
+  }
+
+  return simplified;
+}
+
+function simplifyByDouglasPeucker(
+  points: Array<{ x: number; y: number }>,
+  squaredTolerance: number
+): Array<{ x: number; y: number }> {
+  if (points.length <= 2) {
+    return points;
+  }
+
+  const markers = new Uint8Array(points.length);
+  const stack: number[] = [0, points.length - 1];
+  markers[0] = 1;
+  markers[points.length - 1] = 1;
+
+  while (stack.length >= 2) {
+    const endIndex = stack.pop() as number;
+    const startIndex = stack.pop() as number;
+
+    let furthestIndex = -1;
+    let maxSquaredDistance = 0;
+
+    for (let index = startIndex + 1; index < endIndex; index += 1) {
+      const squaredDistance = computeSquaredSegmentDistance(
+        points[index],
+        points[startIndex],
+        points[endIndex]
+      );
+
+      if (squaredDistance > maxSquaredDistance) {
+        furthestIndex = index;
+        maxSquaredDistance = squaredDistance;
+      }
+    }
+
+    if (furthestIndex !== -1 && maxSquaredDistance > squaredTolerance) {
+      markers[furthestIndex] = 1;
+      stack.push(startIndex, furthestIndex, furthestIndex, endIndex);
+    }
+  }
+
+  const simplified: Array<{ x: number; y: number }> = [];
+  for (let index = 0; index < points.length; index += 1) {
+    if (markers[index]) {
+      simplified.push(points[index]);
+    }
+  }
+
+  return simplified;
+}
+
+function computeSquaredDistance(
+  left: { x: number; y: number },
+  right: { x: number; y: number }
+): number {
+  const deltaX = left.x - right.x;
+  const deltaY = left.y - right.y;
+  return deltaX * deltaX + deltaY * deltaY;
+}
+
+function computeSquaredSegmentDistance(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number }
+): number {
+  let projectedX = start.x;
+  let projectedY = start.y;
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+
+  if (deltaX !== 0 || deltaY !== 0) {
+    const projection = ((point.x - start.x) * deltaX + (point.y - start.y) * deltaY) /
+      (deltaX * deltaX + deltaY * deltaY);
+
+    if (projection > 1) {
+      projectedX = end.x;
+      projectedY = end.y;
+    } else if (projection > 0) {
+      projectedX = start.x + deltaX * projection;
+      projectedY = start.y + deltaY * projection;
+    }
+  }
+
+  const distanceX = point.x - projectedX;
+  const distanceY = point.y - projectedY;
+  return distanceX * distanceX + distanceY * distanceY;
 }
 
 function fractionalPart(value: number): number {

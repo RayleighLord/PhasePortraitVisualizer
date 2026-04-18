@@ -22,14 +22,18 @@ export function createSolverSettings(bounds: AxisBounds): SolverSettings {
     Math.abs(bounds.yMin),
     Math.abs(bounds.yMax)
   );
+  const targetSpatialStep = Math.max(span / 84, 0.03);
+  const maxStepSize = 0.08;
 
   return {
     minStepSize: 0.0025,
-    maxStepSize: 0.08,
+    maxStepSize,
     maxSteps: 3500,
     blowUpThreshold: Math.max(maxAbs * 12, 24),
-    targetSpatialStep: Math.max(span / 84, 0.03),
-    maxArcLength: Math.max(span * 3.5, 14)
+    targetSpatialStep,
+    maxArcLength: Math.max(span * 3.5, 14),
+    convergenceSpeedThreshold: Math.max((targetSpatialStep * 0.04) / maxStepSize, 1e-4),
+    convergenceStepStreak: 14
   };
 }
 
@@ -60,9 +64,11 @@ function traceDirection(
   direction: -1 | 1
 ): TraceResult {
   const points: StatePoint[] = [{ x: seed.x, y: seed.y }];
+  const convergenceSegmentLength = settings.targetSpatialStep * 0.04;
   let current = { x: seed.x, y: seed.y };
   let steps = 0;
   let arcLength = 0;
+  let convergenceStreak = 0;
 
   while (steps < settings.maxSteps) {
     const vector = system.evaluate(current.x, current.y);
@@ -70,6 +76,10 @@ function traceDirection(
 
     if (!Number.isFinite(speed)) {
       return { points, terminationReason: "invalid-value", arcLength };
+    }
+
+    if (steps === 0 && speed <= settings.convergenceSpeedThreshold * 0.25) {
+      return { points, terminationReason: "converged", arcLength };
     }
 
     const stepSize = selectStepSize(speed, settings) * direction;
@@ -104,12 +114,21 @@ function traceDirection(
 
       const segmentLength = Math.hypot(next.x - current.x, next.y - current.y);
       arcLength += segmentLength;
+      points.push(next);
+
       if (arcLength >= settings.maxArcLength) {
-        points.push(next);
         return { points, terminationReason: "length-limit", arcLength };
       }
 
-      points.push(next);
+      const isConverging =
+        Math.abs(stepSize) >= settings.maxStepSize * 0.999 &&
+        speed <= settings.convergenceSpeedThreshold &&
+        segmentLength <= convergenceSegmentLength;
+      convergenceStreak = isConverging ? convergenceStreak + 1 : 0;
+      if (convergenceStreak >= settings.convergenceStepStreak) {
+        return { points, terminationReason: "converged", arcLength };
+      }
+
       current = next;
       steps += 1;
     } catch {
@@ -222,8 +241,19 @@ function selectTerminationReason(
   backward: TraceResult,
   forward: TraceResult
 ): TerminationReason {
+  const priorities: Record<TerminationReason, number> = {
+    "solver-error": 5,
+    "invalid-value": 4,
+    "escaped-plot": 3,
+    "length-limit": 2,
+    converged: 1,
+    "max-steps": 0
+  };
   const candidates = [forward.terminationReason, backward.terminationReason];
-  return candidates.find((reason) => reason !== "max-steps") ?? "max-steps";
+
+  return candidates.reduce((best, candidate) =>
+    priorities[candidate] > priorities[best] ? candidate : best
+  , "max-steps");
 }
 
 function clamp(value: number, min: number, max: number): number {

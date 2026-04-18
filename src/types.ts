@@ -45,6 +45,8 @@ export interface SolverSettings {
   blowUpThreshold: number;
   targetSpatialStep: number;
   maxArcLength: number;
+  convergenceSpeedThreshold: number;
+  convergenceStepStreak: number;
 }
 
 export type TerminationReason =
@@ -52,7 +54,8 @@ export type TerminationReason =
   | "length-limit"
   | "max-steps"
   | "invalid-value"
-  | "solver-error";
+  | "solver-error"
+  | "converged";
 
 export interface Trajectory {
   id: string;
